@@ -1,17 +1,51 @@
 // Prime CSSs
-import 'primereact/resources/themes/arya-orange/theme.css'; //theme
+// import 'primereact/resources/themes/saga-orange/theme.css'; //theme
 import 'primereact/resources/primereact.min.css'; //core css
 import 'primeicons/primeicons.css'; //icons
 import 'primeflex/primeflex.css'; // primeflex
 
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import { InputText } from 'primereact/inputtext';
 import { Button } from 'primereact/button';
-import { useCallback, useMemo, useState } from 'react';
+import { Inplace, InplaceDisplay, InplaceContent } from 'primereact/inplace';
+import { SelectButton } from 'primereact/selectbutton';
+import { Image } from 'primereact/image';
+import { Badge } from 'primereact/badge';
 
 function App() {
-
   const [words, setWords] = useState([]);
   const [newWord, setNewWord] = useState({ value: '', points: 0 });
+  const [editingWord, setEditingWord] = useState(); // {index: -1, value: '', points: 0}
+
+  // Theme
+  const themes = useMemo(() => [
+    {
+      label: 'Light',
+      value: 'saga-orange',
+      url: 'themes/saga-orange/theme.css'
+    },
+    {
+      label: 'Dark',
+      value: 'arya-orange',
+      url: 'themes/arya-orange/theme.css'
+    }
+  ], []);
+
+  const [theme, setTheme] = useState('saga-orange');
+
+  const onThemeChange = useCallback(e => {
+    setTheme(e.value);
+  }, []);
+
+  useEffect(() => {
+    const currentTheme = theme ? themes.find(t => t.value === theme) : themes[0];
+    if (currentTheme) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = currentTheme.url;
+      document.head.appendChild(link);
+    }
+  }, [theme, themes]);
 
   const addWord = useCallback(() => {
     if (newWord.value === '' || newWord.points === 0) {
@@ -73,7 +107,7 @@ function App() {
     });
   }, [calculePoints]);
 
-  const onKeyPress = useCallback(e => {
+  const onKeyPressNewWord = useCallback(e => {
     if (e.keyCode === 13) {
       addWord();
     }
@@ -86,46 +120,105 @@ function App() {
         placeholder='New word'
         value={newWord.value}
         onChange={onChangeNewWork}
-        onKeyUp={onKeyPress}
+        onKeyUp={onKeyPressNewWord}
+        disabled={!!editingWord}
       />
       <Button
         icon='pi pi-plus'
         className='p-button-warning'
         onClick={addWord}
+        disabled={!!editingWord}
       />
     </div>
-  ), [addWord, newWord, onChangeNewWork, onKeyPress]);
+  ), [addWord, newWord, onChangeNewWork, onKeyPressNewWord, editingWord]);
 
   const removeWord = useCallback(index => {
-    const updatedWords = [...words];
-    updatedWords.splice(index, 1);
-    setWords(updatedWords);
+    setWords(words.filter((_, i) => i !== index));
+    setEditingWord(null);
   }, [words]);
+
+  const editWord = useCallback(index => {
+    setEditingWord({
+      index,
+      value: words[index].value,
+      points: words[index].points
+    });
+  }, [words]);
+
+  const saveEditingWord = useCallback(() => {
+    const updatedWords = [...words];
+    updatedWords[editingWord.index] = {
+      value: editingWord.value,
+      points: editingWord.points
+    };
+    setWords(updatedWords);
+
+    setEditingWord(null);
+  }, [editingWord, words]);
+
+  const onChangeEditingWork = useCallback(e => {
+    let value = e.target.value ?? '';
+
+    if (value) {
+      value = value.toUpperCase();
+    }
+
+    const points = calculePoints(value);
+
+    setEditingWord({
+      ...editingWord,
+      value,
+      points
+    });
+  }, [calculePoints, editingWord]);
+
+  const onKeyPressEditingWork = useCallback(e => {
+    if (e.keyCode === 13) {
+      saveEditingWord();
+    }
+  }, [saveEditingWord]);
 
   const renderWord = useCallback((word, index) => (
     <div className='col-12' key={index}>
-      <div className='p-inputgroup'>
-        <span className='p-inputgroup-addon'>{word.points}</span>
-        <InputText
-          disabled
-          value={word.value}
-        />
-        <Button
-          icon='pi pi-times'
-          className='p-button-danger'
-          onClick={() => removeWord(index)}
-        />
-      </div>
+      <Inplace active={editingWord?.index === index} onToggle={() => editWord(index)}>
+        <InplaceDisplay>
+          <div className='p-inputgroup'>
+            <span className='p-inputgroup-addon'>{word.points}</span>
+            <InputText
+              disabled
+              value={word.value}
+            />
+          </div>
+        </InplaceDisplay>
+        <InplaceContent>
+          <div className='p-inputgroup'>
+            <span className='p-inputgroup-addon'>{editingWord?.points}</span>
+            <Button
+              icon='pi pi-check'
+              className='p-button-success'
+              onClick={saveEditingWord}
+            />
+            <InputText
+              value={editingWord?.value}
+              onChange={onChangeEditingWork}
+              onKeyUp={onKeyPressEditingWork}
+            />
+            <Button
+              icon='pi pi-times'
+              className='p-button-danger'
+              onClick={() => removeWord(index)}
+            />
+          </div>
+        </InplaceContent>
+      </Inplace>
     </div>
-  ), [removeWord]);
+  ), [removeWord, editingWord, saveEditingWord, onChangeEditingWork, onKeyPressEditingWork, editWord]);
 
   const renderWords = useMemo(() => {
-    const reversed = [...words].reverse();
-    return (
-      reversed.map((word, index) => (
-        renderWord(word, index)
-      ))
-    );
+    const wordsMapped = words.map((word, index) => (
+      renderWord(word, index)
+    ));
+    return wordsMapped.reverse();
   }, [renderWord, words]);
 
   const totalPoints = useMemo(() => {
@@ -136,10 +229,10 @@ function App() {
     return tp;
   }, [words]);
 
-  const reset = useCallback(() => {
-    setWords([]);
-    setNewWord({ value: '', points: 0 });
-  }, []);
+  // const reset = useCallback(() => {
+  //   setWords([]);
+  //   setNewWord({value: '', points: 0});
+  // }, []);
 
   return (
     <div className='grid'>
@@ -149,21 +242,30 @@ function App() {
 
             <div className='col-12'>
               <div className='grid'>
+
                 <div className='col-2'>
-                  <div className='col-12'>
-                    <div className='p-inputgroup'>
-                      <span className='p-inputgroup-addon'>{totalPoints}</span>
-                    </div>
-                  </div>
+                  <Image src='/logo512.png' width='64' />
+                  {totalPoints > 0 ?
+                    <Badge value={totalPoints} style={{ position: 'relative', right: totalPoints > 100 ? '22px' : '15px' }} />
+                    : <></>
+                  }
                 </div>
-                <div className='col-10'>
+
+                <div className='col-5'>
                   <div className='text-900 font-medium text-xl mb-2'>ordleg</div>
                   <div className='text-600'>word play</div>
                 </div>
+
+                <div className='col-5' style={{ textAlign: 'right' }}>
+                  <SelectButton
+                    value={theme}
+                    options={themes}
+                    onChange={onThemeChange}
+                  />
+                </div>
+
               </div>
             </div>
-
-            <hr className='my-3 mx-0 border-top-1 border-bottom-none border-300' />
 
             <div className='col-12'>
               {renderNewWord}
@@ -177,20 +279,6 @@ function App() {
                   <div className='grid'>
                     {renderWords}
                   </div>
-                </div>
-
-                <hr className='my-3 mx-0 border-top-1 border-bottom-none border-300' />
-
-                <div className='col-12' style={{ textAlign: 'right' }}>
-                  <Button
-                    type='button'
-                    label='Reset game'
-                    icon='pi pi-times'
-                    className='p-button-danger'
-                    badge={words.length}
-                    badgeClassName='p-badge-danger'
-                    onClick={reset}
-                  />
                 </div>
               </>
               : <></>
